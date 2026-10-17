@@ -1,1 +1,228 @@
-https://oneandonlytwin43-oss.github.io/cannon-command/
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#080d12">
+<title>ORBIT | Command Center</title>
+
+<style>
+:root {
+  --bg:#080d12;
+  --panel:#111b24;
+  --border:#243543;
+  --green:#00ff9d;
+  --text:#edf5f8;
+  --muted:#8ba0ae;
+  --red:#ff5369;
+  --yellow:#ffc857;
+}
+* {box-sizing:border-box}
+body {
+  margin:0;
+  background:var(--bg);
+  color:var(--text);
+  font-family:Arial,sans-serif;
+}
+header {
+  padding:20px;
+  background:#0d1720;
+  border-bottom:1px solid var(--border);
+}
+.logo {
+  font-size:36px;
+  font-weight:900;
+  letter-spacing:5px;
+  color:var(--green);
+}
+.subtitle {
+  color:var(--muted);
+  font-size:12px;
+  letter-spacing:2px;
+  margin-top:5px;
+}
+.status {
+  margin-top:15px;
+  display:flex;
+  flex-wrap:wrap;
+  gap:10px;
+}
+.badge {
+  padding:8px 12px;
+  border:1px solid var(--border);
+  border-radius:8px;
+  font-size:12px;
+}
+.green {color:var(--green)}
+.red {color:var(--red)}
+.yellow {color:var(--yellow)}
+main {
+  max-width:1200px;
+  margin:auto;
+  padding:16px;
+}
+.grid {
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:12px;
+}
+.card {
+  background:var(--panel);
+  border:1px solid var(--border);
+  border-radius:12px;
+  padding:16px;
+  margin-bottom:14px;
+}
+.card h3 {
+  margin:0 0 12px;
+  color:var(--muted);
+  font-size:13px;
+  letter-spacing:1px;
+}
+.value {
+  font-size:25px;
+  font-weight:bold;
+  overflow-wrap:anywhere;
+}
+.section-title {
+  color:var(--green);
+  font-size:18px;
+  margin:25px 0 12px;
+}
+table {
+  width:100%;
+  border-collapse:collapse;
+  font-size:13px;
+}
+th,td {
+  padding:12px 8px;
+  text-align:left;
+  border-bottom:1px solid var(--border);
+}
+th {color:var(--muted)}
+.table-wrap {overflow-x:auto}
+button {
+  background:var(--green);
+  color:#06110c;
+  border:0;
+  border-radius:8px;
+  padding:12px 16px;
+  font-weight:bold;
+  cursor:pointer;
+}
+button:disabled {
+  opacity:.4;
+  cursor:not-allowed;
+}
+input {
+  width:100%;
+  background:#09121a;
+  border:1px solid var(--border);
+  border-radius:8px;
+  padding:12px;
+  color:white;
+  margin-bottom:10px;
+}
+.notice {
+  color:var(--muted);
+  font-size:13px;
+  line-height:1.6;
+}
+.alert {
+  border-left:3px solid var(--yellow);
+  padding:12px;
+  background:#1b2024;
+  margin-bottom:10px;
+  border-radius:5px;
+}
+footer {
+  text-align:center;
+  padding:30px;
+  color:var(--muted);
+  font-size:12px;
+}
+@media(min-width:750px) {
+  .grid {grid-template-columns:repeat(4,1fr)}
+}
+</style>
+</head>
+
+<body>
+
+<header>
+  <div class="logo">ORBIT</div>
+  <div class="subtitle">
+    MARKET INTELLIGENCE COMMAND CENTER
+  </div>
+
+  <div class="status">
+    <span class="badge green">● DASHBOARD ONLINE</span>
+    <span class="badge yellow">● RESEARCH MODE</span>
+    <span class="badge red">● LIVE DATA DISCONNECTED</span>
+    <span class="badge">EXECUTION DISABLED</span>
+  </div>
+</header>
+
+<main>
+
+<div class="grid">
+  <div class="card">
+    <h3>MARKET FEED</h3>
+    <div class="value yellow">OFFLINE</div>
+  </div>
+
+  <div class="card">
+    <h3>TRACKED TOKENS</h3>
+    <div class="value" id="tracked">0</div>
+  </div>
+
+  <div class="card">
+    <h3>BUY CANDIDATES</h3>
+    <div class="value green" id="candidates">0</div>
+  </div>
+
+  <div class="card">
+    <h3>TRADING ENGINE</h3>
+    <div class="value red">DISABLED</div>
+  </div>
+</div>
+
+<h2 class="section-title">MARKET RESEARCH</h2>
+
+<div class="card">
+  <h3>DATA SOURCES</h3>
+  <p>Pump.fun: <span class="red">Not connected</span></p>
+  <p>FOMO: <span class="red">Not connected</span></p>
+  <p>Solana: <span class="yellow">Awaiting integration</span></p>
+  <p class="notice">
+    ORBIT will research token launches, market momentum,
+    liquidity, holder behavior, and narrative strength
+    once verified market-data connections are installed.
+  </p>
+</div>
+
+<h2 class="section-title">TOKEN WATCHLIST</h2>
+
+<div class="card">
+  <h3>ADD TOKEN TO LOCAL WATCHLIST</h3>
+
+  <input id="tokenName"
+    placeholder="Token name or symbol">
+
+  <input id="tokenMint"
+    placeholder="Solana token mint address">
+
+  <button onclick="addToken()">ADD TO WATCHLIST</button>
+
+  <p class="notice">
+    Watchlist entries are saved locally in this browser.
+    Adding a token does not start live monitoring.
+  </p>
+</div>
+
+<div class="card table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>TOKEN</th>
+        <th>MINT</
