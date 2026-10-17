@@ -1,92 +1,745 @@
-<!doctype html><html><head><meta charset="utf-8"><title>CANNON COMMAND // PAPER</title>
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
-<style>
-:root{--g:#00ff41;--m:#008f11;--d:#003b00;--r:#a04040}
-*{box-sizing:border-box}body{margin:0;background:#000;color:var(--g);font:12px/1.35 "Courier New",ui-monospace,monospace}
-#rain{position:fixed;inset:0;opacity:.09;z-index:0;pointer-events:none}
-.wrap{position:relative;z-index:1;padding:8px;display:grid;gap:8px}
-.glow{text-shadow:0 0 6px rgba(0,255,65,.6)}
-.box{border:1px solid var(--m);background:rgba(0,10,0,.85);box-shadow:0 0 10px rgba(0,255,65,.15) inset,0 0 6px rgba(0,255,65,.15);padding:6px;overflow:hidden}
-.box h3{margin:0 0 4px;font-size:11px;color:var(--m);letter-spacing:2px;border-bottom:1px dashed var(--d)}
-header{display:flex;align-items:center;gap:16px}
-.logo{font-size:26px;font-weight:bold;letter-spacing:4px}
-.badge{border:1px solid var(--g);padding:2px 8px;animation:bl 1.5s infinite;font-weight:bold}
-@keyframes bl{50%{opacity:.45}}
-#clock{margin-left:auto;font-size:22px}
-.tape{white-space:nowrap;overflow:hidden;border-top:1px solid var(--d);border-bottom:1px solid var(--d)}
-.tape span{display:inline-block;padding-left:100%;animation:sc 40s linear infinite}@keyframes sc{to{transform:translateX(-100%)}}
-.stats{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}.stat .v{font-size:20px}
-.cards{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}
-.card{cursor:pointer;min-height:110px}.card:hover,.card.sel{border-color:var(--g);box-shadow:0 0 14px rgba(0,255,65,.5)}
-.card img{width:22px;height:22px;border-radius:50%;vertical-align:middle;filter:grayscale(1) sepia(1) hue-rotate(70deg) saturate(4)}
-.card canvas{width:100%;height:36px}
-.main{display:grid;grid-template-columns:1fr 380px;gap:8px}
-#chart{height:400px}
-table{width:100%;border-collapse:collapse}td,th{padding:2px 4px;text-align:left;white-space:nowrap}th{color:var(--m);font-weight:normal}
-tr.click{cursor:pointer}tr.click:hover{background:var(--d)}
-.up{color:var(--g);font-weight:bold}.dn{color:var(--m)}.loss{color:var(--r)}.dim{color:var(--m)}
-.scroll{max-height:300px;overflow:auto}.low{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
-pre{white-space:pre-wrap;margin:0;color:var(--m);max-height:300px;overflow:auto}
-.rocket{text-align:center;font-size:11px}.rocket .r{font-size:30px;display:inline-block;animation:fl 2s ease-in-out infinite}@keyframes fl{50%{transform:translateY(-6px)}}
-::-webkit-scrollbar{width:6px}::-webkit-scrollbar-thumb{background:var(--d)}
-</style></head><body><canvas id="rain"></canvas><div class="wrap">
-<header class="box"><div class="logo glow">▣ CANNON COMMAND</div><div class="badge glow">PAPER / PLAY MONEY</div><div class="dim">read-only · no keys · no trading</div><button id="snd" onclick="togSnd()" style="background:#000;color:#00ff41;border:1px solid #008f11;font:inherit;cursor:pointer;padding:3px 8px">🔇 CLICK TO ENABLE SOUND</button><div id="clock" class="glow"></div></header>
-<div class="tape box"><span id="tape">loading tickers…</span></div>
-<div class="stats" id="stats"></div>
-<div class="cards" id="cards"></div>
-<div class="main"><div class="box"><h3 id="ctitle">CHART</h3><div id="chart"></div></div>
-<div class="box"><h3>WATCHLIST // CALLOUT PICKS (seen.json)</h3><div class="scroll" style="max-height:400px"><table id="picks"></table></div></div></div>
-<div class="low"><div class="box"><h3>HOLDINGS</h3><div class="scroll"><table id="hold"></table></div><h3 style="margin-top:8px">RECENT EVENTS (callout_trades.jsonl)</h3><div class="scroll"><table id="ev"></table></div></div>
-<div class="box"><h3>SCAN // GECKOTERMINAL TRENDING + PUMPSWAP</h3><div class="scroll" style="max-height:620px"><table id="trend"></table></div></div>
-<div class="box"><h3 id="scanname">LATEST SCAN</h3><pre id="scan"></pre></div></div>
-<div class="dim" id="foot"></div></div>
-<script>const DATA='https://raw.githubusercontent.com/oneandonlytwin43-oss/cannon-command/data/state.json';
-const $=id=>document.getElementById(id);let S=null,sel=null,chart,cs,vs;
-const f=(x,d=4)=>x==null||isNaN(x)?'—':(+x).toFixed(d);
-const usd=x=>x==null?'—':(+x>=1e6?'$'+(x/1e6).toFixed(2)+'M':+x>=1e3?'$'+(x/1e3).toFixed(1)+'K':+x>=1?'$'+(+x).toFixed(2):'$'+(+x).toPrecision(4));
-const pc=x=>x==null||isNaN(x)?'<span class=dim>—</span>':(+x>=0?`<span class=up>▲ ${(+x).toFixed(2)}%</span>`:`<span class=loss>▼ ${(+x).toFixed(2)}%</span>`);
-const sh=m=>m?m.slice(0,4)+'…'+m.slice(-4):'';
-const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-setInterval(()=>$('clock').textContent=new Date().toLocaleTimeString('en-US',{hour12:false,timeZone:'America/New_York'})+' ET',1000);
-// rain
-(()=>{const c=$('rain'),x=c.getContext('2d');let w,h,d;const rs=()=>{w=c.width=innerWidth;h=c.height=innerHeight;d=Array(Math.ceil(w/14)).fill(0).map(()=>Math.random()*h/14)};rs();onresize=rs;
-setInterval(()=>{x.fillStyle='rgba(0,0,0,.08)';x.fillRect(0,0,w,h);x.fillStyle='#00ff41';x.font='13px monospace';d.forEach((y,i)=>{x.fillText(String.fromCharCode(0x30A0+Math.random()*96),i*14,y*14);d[i]=y*14>h&&Math.random()>.975?0:y+1})},70)})();
-function initChart(){chart=LightweightCharts.createChart($('chart'),{layout:{background:{color:'#000'},textColor:'#00ff41',fontFamily:'Courier New'},grid:{vertLines:{color:'#002200'},horzLines:{color:'#002200'}},timeScale:{timeVisible:true,borderColor:'#008f11'},rightPriceScale:{borderColor:'#008f11'},localization:{priceFormatter:p=>p.toPrecision(4)}});
-cs=chart.addCandlestickSeries({upColor:'#00ff41',downColor:'#000',borderUpColor:'#00ff41',borderDownColor:'#008f11',wickUpColor:'#00ff41',wickDownColor:'#008f11'});
-vs=chart.addHistogramSeries({priceScaleId:'v',priceFormat:{type:'volume'},color:'#005f0b'});chart.priceScale('v').applyOptions({scaleMargins:{top:.8,bottom:0}});
-new ResizeObserver(()=>chart.applyOptions({width:$('chart').clientWidth,height:400})).observe($('chart'))}
-async function select(pool,label,mint){if(!pool)return;sel={pool,label,mint};$('ctitle').textContent='CHART // '+label+' // 5m candles (GeckoTerminal) · pool '+sh(pool);
-document.querySelectorAll('.card').forEach(c=>c.classList.toggle('sel',c.dataset.pool==pool));
-try{const r=await (await fetch('https://api.geckoterminal.com/api/v2/networks/solana/pools/'+pool+'/ohlcv/minute?aggregate=5&limit=200')).json();const l=(r.data?.attributes?.ohlcv_list||[]).slice().reverse();if(!l.length)throw 0;
-if(!chart)initChart();cs.setData(l.map(a=>({time:a[0],open:a[1],high:a[2],low:a[3],close:a[4]})));vs.setData(l.map(a=>({time:a[0],value:a[5],color:a[4]>=a[1]?'#00a82d':'#003b00'})));chart.timeScale().fitContent()}
-catch(e){if(chart){chart.remove();chart=null}$('chart').innerHTML=`<iframe style="width:100%;height:400px;border:0" src="https://dexscreener.com/solana/${pool}?embed=1&theme=dark&info=0"></iframe>`}}
-function spark(cv,up){const x=cv.getContext('2d');cv.width=160;cv.height=36;x.strokeStyle=up?'#00ff41':'#008f11';x.shadowColor='#00ff41';x.shadowBlur=4;x.beginPath();let v=18;for(let i=0;i<=40;i++){}x.moveTo(0,30);x.lineTo(160,up?6:30);x.stroke()}
-function render(s){S=s;const t=s.tickers||{},tk=[['BTC','bitcoin'],['ETH','ethereum'],['SOL','solana']].map(([a,b])=>`${a} ${usd(t[b]?.usd)} ${pc(t[b]?.usd_24h_change)}`).join('   ◆   ');
-$('tape').innerHTML=(tk+'   ◆   '+s.holdings.map(h=>`${esc(h.sym)} ${pc(h.upnl_pct)}`).join('   ◆   ')+'   ◆   ').repeat(2);
-const pl=s.pnl_sol;$('stats').innerHTML=[['FREE CASH',f(s.cash)+' SOL'],['HOLDINGS (live)',f(s.holdings_value)+' SOL'],['TOTAL EQUITY',f(s.equity)+' SOL'],['vs START '+s.start,`<span class=${pl>=0?'up':'loss'}>${pl>=0?'▲ +':'▼ '}${f(pl)} SOL (${f(s.pnl_pct,2)}%)</span>`],['EQUITY USD',s.sol_usd?usd(s.equity*s.sol_usd):'—'],['REALIZED / FILLS',f(s.realized)+' SOL / '+(s.n_trades??'—')]].map(([k,v])=>`<div class="box stat"><h3>${k}</h3><div class="v glow">${v}</div></div>`).join('');
-// six monitor cards: holdings first then top trending
-const cards=s.holdings.map(h=>({k:'HOLD',sym:h.sym,pool:h.pair,mint:h.mint,p:h.price_usd,c:h.upnl_pct,sub:'uPnL '+f(h.upnl_sol)+' SOL'})).concat(s.trending.map(p=>({k:'TREND',sym:p.name,pool:p.pool,mint:p.mint,p:p.price,c:p.chg_h24,sub:'vol24 '+usd(p.vol_h24)}))).slice(0,5);
-$('cards').innerHTML=cards.map(c=>`<div class="box card" data-pool="${c.pool}" onclick="select('${c.pool}','${esc(c.sym).replace(/'/g,'')}','${c.mint}')"><h3>${c.k} ▸ ${esc(c.sym).slice(0,18)}</h3><img src="https://dd.dexscreener.com/ds-data/tokens/solana/${c.mint}.png" onerror="this.style.display='none'"> <span class="glow" style="font-size:15px">${usd(c.p)}</span><br>${pc(c.c)}<canvas data-up="${(c.c||0)>=0?1:0}"></canvas><div class=dim>${c.sub}</div></div>`).join('')+
-`<div class="box rocket"><h3>TO THE MOON</h3><div class="r glow">🚀</div><div>${pl>=0?'▲ ASCENDING':'▼ ON THE PAD'}</div><div class=dim>${f(s.pnl_pct,2)}% vs start</div></div>`;
-document.querySelectorAll('.card canvas').forEach(cv=>spark(cv,cv.dataset.up=='1'));
-if(sel)document.querySelectorAll('.card').forEach(c=>c.classList.toggle('sel',c.dataset.pool==sel.pool));
-$('hold').innerHTML='<tr><th>SYM</th><th>SRC</th><th>COST</th><th>VALUE</th><th>uPnL</th><th>1h</th></tr>'+s.holdings.map(h=>`<tr class=click onclick="select('${h.pair}','${esc(h.sym)}','${h.mint}')"><td class=glow>${esc(h.sym)}</td><td class=dim>${h.src||'callout'}</td><td>${f(h.cost)}</td><td>${f(h.value_sol)}${h.live?'':' <span class=dim>(stale)</span>'}</td><td>${pc(h.upnl_pct)}</td><td>${pc(h.chg_h1)}</td></tr>`).join('');
-$('ev').innerHTML=s.events.filter(e=>['BUY','SELL','NEW_CALLOUT'].includes(e.ev)).map(e=>`<tr><td class=dim>${(e.ts||'').slice(5,16).replace('T',' ')}</td><td class=${e.ev=='BUY'?'up':e.ev=='SELL'?'glow':'dim'}>${e.ev=='BUY'?'▲ BUY':e.ev=='SELL'?'▼ SELL':'◆ CALL'}</td><td>${esc(e.sym)}</td><td>${e.size_sol!=null?f(e.size_sol)+' SOL':e.proceeds!=null?f(e.proceeds)+' SOL':esc(e.scan||e.src||'')}</td></tr>`).join('');
-$('picks').innerHTML='<tr><th>SYM</th><th>REPORTED</th><th>PRICE</th><th>24h</th></tr>'+s.picks.map(p=>`<tr class=click onclick="select('${p.pair||''}','${esc(p.symbol)}','${p.mint}')"><td class=glow>${esc(p.symbol)}</td><td class=dim>${esc(p.reported)}</td><td>${usd(p.price_usd)}</td><td>${pc(p.chg_h24)}</td></tr>`).join('');
-const tr=(n,a)=>`<tr><th colspan=5>— ${n} —</th></tr><tr><th>POOL</th><th>PRICE</th><th>1h</th><th>24h</th><th>LIQ</th></tr>`+a.map(p=>`<tr class=click onclick="select('${p.pool}','${esc(p.name).replace(/'/g,'')}','${p.mint}')"><td>${esc(p.name).slice(0,20)}</td><td>${usd(p.price)}</td><td>${pc(p.chg_h1)}</td><td>${pc(p.chg_h24)}</td><td>${usd(p.liq)}</td></tr>`).join('');
-$('trend').innerHTML=tr('TRENDING',s.trending)+tr('PUMPSWAP',s.pumpswap);
-$('scanname').textContent='LATEST SCAN // '+(s.latest_scan.name||'none');$('scan').textContent=s.latest_scan.text;
-$('foot').textContent='updated '+s.ts+' · prices: DexScreener / GeckoTerminal / CoinGecko (cached 20-30s) · PAPER / PLAY MONEY — not real funds';
-if(!sel){const h=s.holdings.find(h=>h.pair);if(h)select(h.pair,h.sym,h.mint)}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ORBIT | Market Intelligence</title>
 
-let AC=null,sndOn=false,seenEv=null;
-function togSnd(){if(!AC)AC=new (window.AudioContext||window.webkitAudioContext)();AC.resume();sndOn=!sndOn;$('snd').textContent=sndOn?'🔊 SOUND ON (click to mute)':'🔇 MUTED (click to unmute)';if(sndOn)chime('trade')}
-function chime(kind){if(!sndOn||!AC)return;const n=kind=='pick'?[880,1175,1568]:kind=='approval'?[660,660,990]:[523,392];let t=AC.currentTime;
-n.forEach((f,i)=>{const o=AC.createOscillator(),g=AC.createGain();o.type=kind=='pick'?'sine':'triangle';o.frequency.value=f;g.gain.setValueAtTime(0,t+i*.13);g.gain.linearRampToValueAtTime(.25,t+i*.13+.01);g.gain.exponentialRampToValueAtTime(.001,t+i*.13+.35);o.connect(g).connect(AC.destination);o.start(t+i*.13);o.stop(t+i*.13+.4)})}
-function alerts(s){const items=s.events.filter(e=>['BUY','SELL','NEW_CALLOUT'].includes(e.ev)).map(e=>[e.ev+'|'+e.ts+'|'+(e.mint||''),e.ev=='NEW_CALLOUT'?'pick':'trade']).concat((s.pending||[]).map(p=>['PEND|'+JSON.stringify(p),'approval']));
-if(seenEv===null){seenEv=new Set(items.map(i=>i[0]));return}const nk=new Set();items.forEach(([k,kind])=>{if(!seenEv.has(k)){seenEv.add(k);nk.add(kind)}});
-['pick','trade','approval'].forEach((k,i)=>nk.has(k)&&setTimeout(()=>chime(k),i*700))}
-async function poll(){try{const s=await (await fetch(DATA+'?t='+Date.now(),{cache:'no-store'})).json();render(s);alerts(s)}catch(e){$('foot').textContent='update failed: '+e}}
-poll();setInterval(poll,8000);setInterval(()=>sel&&select(sel.pool,sel.label,sel.mint),60000);
-</script></body></html>
+<style>
+:root {
+  --bg: #080d1e;
+  --glass: #18223bdc;
+  --cyan: #65d9ff;
+  --violet: #a48bff;
+  --pink: #ff8bc8;
+  --text: #f2f5ff;
+  --muted: #a2acc9;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  color: var(--text);
+  font-family: system-ui, sans-serif;
+  background:
+    radial-gradient(ellipse at 80% 0%, #343e7a, transparent 55%),
+    radial-gradient(ellipse at 0% 75%, #173858, transparent 50%),
+    var(--bg);
+  overflow-x: hidden;
+}
+
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px;
+  border-bottom: 1px solid #ffffff20;
+}
+
+.brand {
+  font-size: 20px;
+  font-weight: 900;
+  letter-spacing: 5px;
+}
+
+.brand span { color: var(--cyan); }
+
+.pill {
+  padding: 9px 12px;
+  border: 1px solid #ffffff35;
+  border-radius: 30px;
+  font-size: 10px;
+  color: #c8d6f8;
+}
+
+main {
+  max-width: 1400px;
+  margin: auto;
+  padding: 24px 18px 60px;
+}
+
+.eyebrow {
+  color: var(--cyan);
+  font-size: 11px;
+  letter-spacing: 3px;
+  font-weight: 800;
+}
+
+h1 {
+  font-size: clamp(42px, 7vw, 80px);
+  line-height: 1.04;
+  letter-spacing: -3px;
+  margin: 16px 0;
+}
+
+h1 em {
+  font-style: normal;
+  background: linear-gradient(110deg, #e6d9ff, #8cceff, #ffa9da);
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+}
+
+.sub {
+  color: var(--muted);
+  line-height: 1.6;
+  max-width: 600px;
+}
+
+.hero {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  align-items: center;
+  gap: 20px;
+  min-height: 380px;
+}
+
+.planet-area {
+  height: 360px;
+  position: relative;
+  display: grid;
+  place-items: center;
+  perspective: 850px;
+  overflow: hidden;
+  isolation: isolate;
+  transition: height .5s ease;
+}
+
+.planet {
+  position: relative;
+  width: 230px;
+  height: 230px;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at 28% 25%,
+    #c6f2ff 0%,
+    #4c8bc8 15%,
+    #4a3c9b 43%,
+    #101d48 73%
+  );
+  box-shadow:
+    inset -22px -20px 44px #040819c7,
+    0 0 60px #7774ff77,
+    0 0 130px #4a7dff30;
+  animation: float 7s ease-in-out infinite;
+  transition: width .5s, height .5s;
+}
+
+.planet::after {
+  content: "";
+  position: absolute;
+  inset: 8%;
+  border-radius: 50%;
+  background: repeating-linear-gradient(
+    160deg,
+    transparent 0 22px,
+    #ffffff0b 23px 25px,
+    transparent 26px 42px
+  );
+  transform: rotate(-18deg);
+}
+
+.ring {
+  position: absolute;
+  width: 355px;
+  height: 110px;
+  border: 2px solid #9cddff9c;
+  border-radius: 50%;
+  transform: rotate(-24deg);
+  box-shadow: 0 0 26px #9fafff66;
+  transition: width .5s, height .5s;
+}
+
+.ring.two {
+  width: 300px;
+  height: 220px;
+  transform: rotate(56deg);
+  border-color: #b99bff60;
+}
+
+.stars {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    radial-gradient(2px 2px at 10% 20%, white 95%, transparent),
+    radial-gradient(2px 2px at 75% 25%, #a2cfff 95%, transparent),
+    radial-gradient(1px 1px at 88% 76%, white 95%, transparent),
+    radial-gradient(2px 2px at 27% 82%, #dfb8ff 95%, transparent),
+    radial-gradient(1px 1px at 60% 64%, white 95%, transparent);
+  animation: twinkle 6s ease-in-out infinite alternate;
+}
+
+.scanline {
+  position: absolute;
+  inset: 20px;
+  border-radius: 50%;
+  pointer-events: none;
+  background: conic-gradient(
+    from 20deg,
+    transparent 0 300deg,
+    #78bfff18 350deg,
+    #b7dfff77 360deg
+  );
+  -webkit-mask-image: radial-gradient(
+    circle,
+    transparent 0 39%,
+    black 40% 41%,
+    transparent 42%
+  );
+  mask-image: radial-gradient(
+    circle,
+    transparent 0 39%,
+    black 40% 41%,
+    transparent 42%
+  );
+  animation: sweep 12s linear infinite;
+}
+
+.orb-caption {
+  position: absolute;
+  bottom: 12px;
+  font-size: 10px;
+  letter-spacing: 3px;
+  color: #cbd6ff;
+}
+
+.glass {
+  background: linear-gradient(130deg, #1c2845d9, #10182bd9);
+  border: 1px solid #ffffff20;
+  border-radius: 22px;
+  box-shadow: 0 20px 55px #0004;
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+  margin: 25px 0;
+}
+
+.stat { padding: 20px; }
+
+.stat label {
+  display: block;
+  font-size: 10px;
+  letter-spacing: 1px;
+  color: var(--muted);
+}
+
+.stat strong {
+  display: block;
+  font-size: 35px;
+  margin: 12px 0 5px;
+}
+
+.stat small {
+  color: #b3bdd8;
+  font-size: 11px;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 1.4fr .85fr;
+  gap: 18px;
+}
+
+.card {
+  padding: 22px;
+  min-width: 0;
+}
+
+.heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.heading h2 {
+  font-size: 16px;
+  margin: 0;
+}
+
+.badge {
+  font-size: 10px;
+  color: #d7ceff;
+  border: 1px solid #9c9cff5e;
+  border-radius: 30px;
+  padding: 7px 10px;
+}
+
+.coin {
+  display: grid;
+  grid-template-columns: 36px 1fr auto;
+  gap: 12px;
+  align-items: center;
+  padding: 15px 0;
+  border-top: 1px solid #ffffff13;
+}
+
+.icon {
+  display: grid;
+  place-items: center;
+  height: 36px;
+  border-radius: 12px;
+  background: linear-gradient(140deg, #5b83c5, #8155a5);
+  font-weight: 900;
+}
+
+.name {
+  font-weight: 750;
+  font-size: 13px;
+}
+
+.mint {
+  font-size: 10px;
+  color: var(--muted);
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+}
+
+.change {
+  text-align: right;
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--pink);
+}
+
+.change small {
+  display: block;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 400;
+  margin-top: 4px;
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+button {
+  border: 1px solid #ffffff30;
+  color: white;
+  background: #ffffff12;
+  border-radius: 12px;
+  padding: 12px 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+button.primary {
+  background: linear-gradient(120deg, #5376da, #9c6ed7);
+  border: 0;
+}
+
+button:focus-visible {
+  outline: 2px solid var(--cyan);
+}
+
+.track {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 20px 0 8px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.progress {
+  height: 9px;
+  border-radius: 10px;
+  background: #ffffff18;
+  overflow: hidden;
+}
+
+.progress span {
+  display: block;
+  width: 55.26%;
+  height: 100%;
+  background: linear-gradient(90deg, #6eacff, #bc83ff, #f4a1d3);
+}
+
+.steps {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: #8f9bb8;
+  margin-top: 8px;
+}
+
+.note {
+  font-size: 11px;
+  color: #a8b3d1;
+  line-height: 1.6;
+  margin-top: 17px;
+}
+
+.footer {
+  text-align: center;
+  color: #8795b7;
+  font-size: 11px;
+  margin-top: 25px;
+}
+
+/* Immersive mode */
+
+body.immersive .stats,
+body.immersive .layout {
+  opacity: .12;
+  filter: blur(4px);
+  transform: scale(.97);
+  pointer-events: none;
+}
+
+body.immersive .hero {
+  min-height: 65vh;
+}
+
+body.immersive .planet-area {
+  height: 480px;
+}
+
+body.immersive .planet {
+  width: 280px;
+  height: 280px;
+}
+
+body.immersive .ring {
+  width: 420px;
+  height: 135px;
+}
+
+body.immersive .ring.two {
+  width: 355px;
+  height: 250px;
+}
+
+.stats,
+.layout {
+  transition: opacity .4s, filter .4s, transform .4s;
+}
+
+@keyframes float {
+  50% { transform: translateY(-12px) rotate(4deg); }
+}
+
+@keyframes twinkle {
+  to { opacity: .22; }
+}
+
+@keyframes sweep {
+  to { transform: rotate(360deg); }
+}
+
+@media (max-width: 850px) {
+  .hero {
+    grid-template-columns: 1fr;
+  }
+
+  .planet-area {
+    grid-row: 1;
+    height: 270px;
+  }
+
+  .planet {
+    width: 175px;
+    height: 175px;
+  }
+
+  .ring {
+    width: 280px;
+    height: 90px;
+  }
+
+  .ring.two {
+    width: 240px;
+    height: 170px;
+  }
+
+  .stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .layout {
+    grid-template-columns: 1fr;
+  }
+
+  h1 {
+    font-size: 46px;
+  }
+
+  body.immersive .hero {
+    min-height: 70vh;
+  }
+
+  body.immersive .planet-area {
+    height: 330px;
+  }
+
+  body.immersive .planet {
+    width: 195px;
+    height: 195px;
+  }
+
+  body.immersive .ring {
+    width: 305px;
+    height: 100px;
+  }
+
+  body.immersive .ring.two {
+    width: 255px;
+    height: 185px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .planet,
+  .stars,
+  .scanline {
+    animation: none;
+  }
+}
+</style>
+</head>
+
+<body>
+
+<header>
+  <div class="brand">ORBIT <span>◉</span></div>
+  <div class="pill">● RESEARCH MODE · DEMO</div>
+</header>
+
+<main>
+
+<section class="hero">
+
+  <div>
+    <div class="eyebrow">ORBIT / FLIGHT DECK 02</div>
+
+    <h1>
+      Find the signal.<br>
+      <em>Own the horizon.</em>
+    </h1>
+
+    <p class="sub">
+      A new command center for launch discovery,
+      deep-drawdown research, and narrative intelligence.
+      Less terminal. More spacecraft.
+    </p>
+
+    <div class="controls">
+      <button class="primary" id="refresh">
+        Simulate next scan ↗
+      </button>
+
+      <button id="details">
+        How alerts work
+      </button>
+
+      <button id="focus" aria-pressed="false">
+        Immersive mode ◉
+      </button>
+    </div>
+  </div>
+
+  <div class="planet-area" id="planetArea">
+
+    <div class="stars"></div>
+    <div class="ring two"></div>
+    <div class="planet"></div>
+    <div class="ring"></div>
+    <div class="scanline"></div>
+
+    <div class="orb-caption">
+      ORBIT / MARKET INTELLIGENCE
+    </div>
+
+  </div>
+
+</section>
+
+<section class="stats">
+
+  <div class="glass stat">
+    <label>TOKENS TRACKED</label>
+    <strong id="tracked">20</strong>
+    <small>Sample research feed</small>
+  </div>
+
+  <div class="glass stat">
+    <label>DEEP CORRECTIONS</label>
+    <strong>00</strong>
+    <small>70% threshold</small>
+  </div>
+
+  <div class="glass stat">
+    <label>NARRATIVE VERIFIED</label>
+    <strong>00</strong>
+    <small>Independent review required</small>
+  </div>
+
+  <div class="glass stat">
+    <label>LIVE EXECUTION</label>
+    <strong style="color:#ffb9b9">OFF</strong>
+    <small>Wallet disconnected</small>
+  </div>
+
+</section>
+
+<section class="layout">
+
+  <div class="glass card">
+
+    <div class="heading">
+      <h2>Retracement radar</h2>
+      <span class="badge">ILLUSTRATIVE DATA</span>
+    </div>
+
+    <div id="coins"></div>
+
+    <p class="note">
+      These are historical scanner snapshots.
+      They are not live prices or verified all-time highs.
+    </p>
+
+  </div>
+
+  <div class="glass card">
+
+    <div class="heading">
+      <h2>Narrative integrity</h2>
+      <span class="badge">FAIL CLOSED</span>
+    </div>
+
+    <div class="eyebrow">
+      RESEARCH GATE / 70% RULE
+    </div>
+
+    <h2 style="font-size:27px;line-height:1.2">
+      A price drop is a
+      <span style="color:var(--cyan)">
+        signal to investigate
+      </span>,
+      not a reason to buy.
+    </h2>
+
+    <div class="track">
+      <span>Largest sample drawdown</span>
+      <strong>38.68% / 70%</strong>
+    </div>
+
+    <div class="progress">
+      <span></span>
+    </div>
+
+    <div class="steps">
+      <span>0%</span>
+      <span>70% alert threshold</span>
+    </div>
+
+    <p class="note">
+      Before a buy-candidate alert, ORBIT must verify
+      launch history, narrative stability, liquidity,
+      developer behavior, holder risk, and reversal evidence.
+    </p>
+
+    <div class="controls">
+      <button id="rules">Show safeguards</button>
+    </div>
+
+  </div>
+
+</section>
+
+<div class="footer">
+  ORBIT / INTERFACE PROTOTYPE · LOCAL DEMO · NO TRADES
+</div>
+
+</main>
+
+<script>
+const data = [
+  ["33Ntom", "33NtommmfsvcNEAmSFpcesNAa6JkPC3H2B2nYPdYpump", 38.68, 7292],
+  ["BbSfc", "BbSfcTNcLcsKPCKZjt7PisruPQVcUoR4PyUH9RFjEapz", 34.16, 9156.66],
+  ["4xrX", "4xrX186AZGVTUv3PFZHJRd3fhtWjFh91ra8Xvtzpump", 16.59, 16249],
+  ["2oXX", "2oXX2BfHahoWkd1iPgpZ8URh7D1iYRkdGr4YqN9cpump", 14.65, 23913.58]
+];
+
+function renderCoins() {
+  const container = document.getElementById("coins");
+
+  container.innerHTML = data.map((coin, index) => `
+    <div class="coin">
+      <div class="icon">${index + 1}</div>
+
+      <div>
+        <div class="name">${coin[0]}…</div>
+        <div class="mint">
+          ${coin[1].slice(0, 8)}…${coin[1].slice(-5)}
+          · history unverified
+        </div>
+      </div>
+
+      <div class="change">
+        −${coin[2].toFixed(2)}%
+        <small>
+          $${coin[3].toLocaleString("en-US")}
+          observed cap
+        </small>
+      </div>
+    </div>
+  `).join("");
+}
+
+renderCoins();
+
+document.getElementById("refresh").addEventListener("click", () => {
+  document.getElementById("refresh").textContent =
+    "Demo snapshot · no live feed";
+});
+
+document.getElementById("details").addEventListener("click", () => {
+  alert(
+    "A 70% drawdown from a verified since-launch peak triggers research review only. Narrative integrity, liquidity, wallet behavior, and reversal must pass before any candidate alert."
+  );
+});
+
+document.getElementById("rules").addEventListener("click", () => {
+  alert(
+    "Safeguards: verified launch history, unchanged narrative, healthy liquidity, developer and holder review, confirmed reversal, and no automatic execution."
+  );
+});
+
+/* IMMERSIVE MODE */
+
+const focusButton = document.getElementById("focus");
+
+focusButton.addEventListener("click", () => {
+  const active = document.body.classList.toggle("immersive");
+
+  focusButton.textContent = active
+    ? "Exit immersive mode ↗"
+    : "Immersive mode ◉";
+
+  focusButton.setAttribute("aria-pressed", String(active));
+
+  if (active) {
+    document.getElementById("planetArea").scrollIntoView({
+      behavior: "smooth",
+      block: "center"
+    });
+  }
+});
+</script>
+
+</body>
+</html>
